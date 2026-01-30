@@ -14,10 +14,11 @@ from datetime import datetime
 
 load_dotenv("tokens.env")
 
-URL = os.getenv("URL")
+URL_1 = os.getenv("URL_1")
+URL_2 = os.getenv("URL_2")
 
 def run_selenium_parse(doctor_name = None, doctor_name_spec = None, date = None, city = None):
-  print(f"✳️ [SELENIUM] Starts...")
+  print(f"✳️ [SELENIUM 1] Starts...")
   chrome_option = Options()
   chrome_option.add_argument("--headless")
   chrome_option.add_argument("--window-size=1920,1080")
@@ -25,11 +26,18 @@ def run_selenium_parse(doctor_name = None, doctor_name_spec = None, date = None,
   chrome_option.add_argument("--disable-dev-shm-usage")
   chrome_option.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
+  chrome_option.add_experimental_option("excludeSwitches",["enable-automation"])
+  chrome_option.add_experimental_option('useAutomationExtension',False)
+
   service = Service(ChromeDriverManager().install())
   driver = webdriver.Chrome(service=service,options=chrome_option)
 
+  driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument',{
+    'source':'Object.defineProperty(navigator,"webdriver",{get: () => undefined})'
+  })
+
   wait = WebDriverWait(driver,7)
-  driver.get(URL)
+  driver.get(URL_1)
   name = None
   parsed_data = []
 
@@ -125,7 +133,7 @@ def run_selenium_parse(doctor_name = None, doctor_name_spec = None, date = None,
             else:
               print("❌ [ERROR] cant find a doctor card!")
       except Exception as e:
-        print(f"❌ [ERROR] no doctors was found {e}")
+        print(f"❌ [ERROR] No doctors was found {e}")
 
     if doctor_name != None:
       doctor_ent = container.find_element(By.CSS_SELECTOR, "#specjalizacja input")
@@ -229,9 +237,87 @@ def run_selenium_parse(doctor_name = None, doctor_name_spec = None, date = None,
     return []
 
 
+def second_selenium_parse(doctor_name = None, doctor_name_spec = None, date = None, city = None):
+  print(f"✳️ [SELENIUM 2] Starts...")
+  chrome_option = Options()
+  chrome_option.add_argument("--headless")
+  chrome_option.add_argument("--window-size=1920,1080")
+  chrome_option.add_argument("--no-sandbox")
+  chrome_option.add_argument("--disable-dev-shm-usage")
+  chrome_option.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+  chrome_option.add_experimental_option("excludeSwitches",["enable-automation"])
+  chrome_option.add_experimental_option('useAutomationExtension',False)
+
+  service = Service(ChromeDriverManager().install())
+  driver = webdriver.Chrome(service=service,options=chrome_option)
+
+  driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument',{
+    'source':'Object.defineProperty(navigator,"webdriver",{get: () => undefined})'
+  })
+
+  wait = WebDriverWait(driver,7)
+  driver.get(URL_2)
+  name = None
+  parsed_data = []
+
+  try:
+    cook = wait.until(EC.presence_of_element_located((By.ID, "onetrust-button-group")))
+
+    if cook:
+      btn = cook.find_element(By.CLASS_NAME, "banner-actions-container")
+      btn.click()
+      print("✅🍪 Cookie was successful accepted")
+      time.sleep(1)
+    else:
+      print("🍪 No cookie button was found")
+    
+    container = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#search")))
+
+    town_ent = container.find_element(By.CSS_SELECTOR, ".city-col input")
+    town_ent.clear()
+    town_ent.send_keys(city)
+    time.sleep(0.5)
+    town_ent.send_keys(Keys.ENTER)
+
+    if doctor_name_spec != None:
+      doctor_ent = container.find_element(By.CSS_SELECTOR, ".specialists-col input")
+      doctor_ent.clear()
+      doctor_ent.send_keys(doctor_name_spec)
+      time.sleep(0.5)
+      doctor_ent.send_keys(Keys.ENTER)
+      time.sleep(0.5)
+
+      final_btn = container.find_element(By.CSS_SELECTOR, ".button-col button")
+      driver.execute_script("arguments[0].click();", final_btn)
+      time.sleep(1.5)
+
+      try:
+        search_results = wait.until(EC.presence_of_element_located((By.ID, "search-content")))
+
+        if search_results:
+          doctors = driver.find_elements(By.CSS_SELECTOR, "li.has-cal-active")
+
+          if doctors:
+            print(f"✅ Doctors {len(doctors)} was found")
+
+      except Exception  as e:
+        print(f"❌ [ERROR] No doctors was found {e}")
+
+  except Exception as e:
+    print(f"⭕ [GLOBAL ERROR] Longer than 7 sec or ERROR_NAME: {e}")
+  finally:
+    driver.quit()
+    print(f"✴️ [SELENIUM] Finished")
+
+  if len(parsed_data) > 0:
+    return parsed_data
+  else:
+    return []
+    
 
 def convert_polish_date(date_str):
-  months_mapping = {
+  months_mapping_1 = {
     "stycznia": "01",
     "lutego": "02",
     "marca": "03",
@@ -245,24 +331,50 @@ def convert_polish_date(date_str):
     "listopada": "11",
     "grudnia": "12"
   }
+
+  months_mapping_2 = {
+    "sty": "01",
+    "lut": "02",
+    "mar": "03",
+    "kwi": "04",
+    "maj": "05",
+    "cze": "06",
+    "lip": "07",
+    "sie": "08",
+    "wrz": "09",
+    "paź": "10",
+    "lis": "11",
+    "gru": "12"
+  }
   try:
     clean_date = date_str.strip().lower()
     
     parts = clean_date.split()
     
-    if len(parts) != 3:
+    if len(parts) != 3 and len(parts) != 2:
       return date_str 
-        
-    day, month_name, year = parts
-    
-    month_number = months_mapping.get(month_name)
-    
-    if not month_number:
-      return date_str 
-        
-    day = day.zfill(2)
-    
-    return f"{year}-{month_number}-{day}"
+
+    if len(parts) == 3:   
+      day, month_name, year = parts
+      
+      month_number = months_mapping_1.get(month_name)
+      
+      if not month_number:
+        return date_str 
+          
+      day = day.zfill(2)
+      
+      return f"{year}-{month_number}-{day}"
+    else:
+      day, month_name = parts
+      month_number = months_mapping_2.get(month_name)
+
+      if not month_number:
+        return date_str
+      
+      day = day.zfill(2)
+
+      return f"{month_number}-{day}"
     
   except Exception as e:
     print(f"❌ [ERROR] Conversion: {e}")
@@ -274,5 +386,8 @@ def convert_polish_date(date_str):
 # Aiogram работает асинхронно, а Selenium - синхронно.
 # Чтобы бот не завис, запускаю Selenium в отдельном потоке через to_thread
 async def search_doctors_func(doctor_name: str,doctor_name_spec:str,date:str,city:str):
-  result = await asyncio.to_thread(run_selenium_parse,doctor_name,doctor_name_spec,date,city)
+  result1 = await asyncio.to_thread(run_selenium_parse,doctor_name,doctor_name_spec,date,city)
+  result2 = await asyncio.to_thread(second_selenium_parse,doctor_name,doctor_name_spec,date,city)
+  result = result1 + result2
+  print(f"✅ Total doctors found: {len(result)} (Site1: {len(result1)}, Site2: {len(result2)})")
   return result

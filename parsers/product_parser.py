@@ -21,7 +21,7 @@ TARGET_ITEMS = 30
 
 def search_products_func(category: str,budget:str):
   print(f"✳️ [SELENIUM] Starts...")
-  print(f"Query: {category}, Date: {budget}")
+  print(f"Query: {category}, Budget: {budget}")
 
   chrome_option = Options()
   chrome_option.add_argument("--headless=new")
