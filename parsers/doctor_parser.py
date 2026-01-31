@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -226,7 +227,7 @@ class LKZ(BaseParserSelenium):
   
   @staticmethod
   def _convert_polish_date(date_str):
-    months_mapping_1 = {
+    months_mapping = {
     "stycznia": "01",
     "lutego": "02",
     "marca": "03",
@@ -241,49 +242,24 @@ class LKZ(BaseParserSelenium):
     "grudnia": "12"
   }
 
-    months_mapping_2 = {
-      "sty": "01",
-      "lut": "02",
-      "mar": "03",
-      "kwi": "04",
-      "maj": "05",
-      "cze": "06",
-      "lip": "07",
-      "sie": "08",
-      "wrz": "09",
-      "paź": "10",
-      "lis": "11",
-      "gru": "12"
-    }
     try:
       clean_date = date_str.strip().lower()
       
       parts = clean_date.split()
       
-      if len(parts) != 3 and len(parts) != 2:
+      if len(parts) != 3:
         return date_str 
 
-      if len(parts) == 3:   
-        day, month_name, year = parts
-        
-        month_number = months_mapping_1.get(month_name)
-        
-        if not month_number:
-          return date_str 
-            
-        day = day.zfill(2)
-        
-        return f"{year}-{month_number}-{day}"
-      else:
-        day, month_name = parts
-        month_number = months_mapping_2.get(month_name)
-
-        if not month_number:
-          return date_str
-        
-        day = day.zfill(2)
-
-        return f"{month_number}-{day}"
+      day, month_name, year = parts
+      
+      month_number = months_mapping.get(month_name)
+      
+      if not month_number:
+        return date_str 
+          
+      day = day.zfill(2)
+      
+      return f"{year}-{month_number}-{day}"
       
     except Exception as e:
       print(f"❌ [ERROR] Conversion: {e}")
@@ -340,14 +316,121 @@ class ZL(BaseParserSelenium):
             if search_results:
               doctors = self.driver.find_elements(By.CSS_SELECTOR, "li.has-cal-active")
 
-              if doctors:
-                print(f"✅ Doctors {len(doctors)} was found")
+              doctors_links = []
 
+              for doctor in doctors:
+                try:
+                  link = doctor.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
+                  doctors_links.append(link)
+                except:
+                  continue
+
+
+              if doctors:
+                for i, link in enumerate(doctors_links):
+                  try:
+                    print(f"🔍 Processing doctor {i+1}/{len(doctors_links)}...")
+
+                    self.driver.get(link)
+                    time.sleep(1)
+                    try:
+                      name_el = self.driver.find_element(By.TAG_NAME, "h1")
+                      name = name_el.text
+                    except Exception as e:
+                      print(f"❌ [ERROR] With name {e}")
+                      name = "Name Not Found"
+
+                    ph_number = "No phone number"
+                    near_date = "Unknown"
+                    street = "Unknown"
+                    url = "Unknown"
+
+                    try:
+                      phone_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-id='gdpr-show-number-block'] button")
+                      self.driver.execute_script("arguments[0].click();", phone_btn)
+
+                      time.sleep(0.5)
+
+                      try:
+                        block = self.driver.find_element(By.CSS_SELECTOR, ".hide")
+
+                        if block:
+                          phone_el = self.driver.find_element(By.CSS_SELECTOR, ".hide .d-flex a[class='text-muted'] b")
+                          ph_number = phone_el.text
+
+                          close_btn = self.driver.find_element(By.CSS_SELECTOR, "button[class='close'] i")
+                          self.driver.execute_script("arguments[0].click();", close_btn)
+                        else:
+                          phone_el = self.driver.find_element(By.CSS_SELECTOR, "[data-id='phone-number'] a[class='text-muted'] b")
+                          ph_number = phone_el.text
+
+                          close_btn = self.driver.find_element(By.CSS_SELECTOR, "button[class='close'] i")
+                          self.driver.execute_script("arguments[0].click();", close_btn)
+
+                      except Exception as e:
+                        print("❌ [ERROR] With phone number on confirm box")
+
+                    except Exception as e:
+                      print("❌ No phone number was found")
+                    
+                    try:
+                      location_btn = self.driver.find_element(By.CSS_SELECTOR, ".location-details a")
+                      self.driver.execute_script("arguments[0].click();", location_btn)
+
+                      time.sleep(0.5)
+
+                      address_media = self.driver.find_element(By.XPATH,"//i[contains(@class, 'svg-icon-pin')]/ancestor::div[@class='media']")
+
+                      media_box = address_media.find_element(By.CLASS_NAME, "media-body")
+
+                      full_text = media_box.text
+                      lines = full_text.split('/n')
+
+                      if len(lines) >= 2:
+                        street = lines[1]
+                      else:
+                        street = "Address not found"
+                      
+                      close_btn = self.driver.find_element(By.CSS_SELECTOR, "button[class='close'] i")
+                      self.driver.execute_script("arguments[0].click();", close_btn)
+
+                    except Exception as e:
+                      print(f"❌ [ERROR] On address {e}")
+                    
+                    url = self.driver.current_url
+
+                    try:
+                      date_box = self.driver.find_element(By.CSS_SELECTOR, ".dp-calendar-state")
+                      date_el = date_box.find_element(By.CSS_SELECTOR, "p[class='text-muted'] span[class='text-nowrap'] strong")
+
+                      date_text = date_el.text
+
+                      near_date = self._convert_polish_date(date_text)
+                    except Exception as e:
+                      print(f"❌ [ERROR] With near date {e}")
+
+
+                    parsed_doc = {
+                      'name' : name,
+                      'ph_number' : ph_number,
+                      'near_date' : near_date,
+                      'street' : street,
+                      'link' : url
+                    }
+
+                    parsed_data.append(parsed_doc)
+
+                    print(f"✅  Doctor: {name} | Tel: {ph_number} | Date: {near_date} | Street: {street} | Link: {url}")
+                    print()
+                  except Exception as e:
+                    print(f"❌ Error on {link}: {e}")
+                    continue
+    
           except Exception  as e:
             print(f"❌ [ERROR] No doctors was found {e}")
 
       except Exception as e:
-        print(f"⭕ [GLOBAL ERROR] Longer than 7 sec or ERROR_NAME: {e}")
+        print(f"❌ [ZnanyLekarz] Longer than 7 sec or ERROR_NAME: {e}")
 
       if len(parsed_data) > 0:
         return parsed_data
@@ -358,6 +441,52 @@ class ZL(BaseParserSelenium):
     finally:
       self.close_driver()
 
+  @staticmethod
+  def _convert_polish_date(date_str):
+    months_mapping = {
+      "sty": "01",
+      "lut": "02",
+      "mar": "03",
+      "kwi": "04",
+      "maj": "05",
+      "cze": "06",
+      "lip": "07",
+      "sie": "08",
+      "wrz": "09",
+      "paź": "10",
+      "lis": "11",
+      "gru": "12"
+    }
+  
+    
+    try:
+      clean_date = date_str.replace(",", "").strip().lower()
+      parts = clean_date.split()
+
+      if len(parts) != 3:
+        return date_str
+      
+      p1, p2, p3 = parts
+          
+      if ":" in p3:
+        day = p1
+        month_name = p2
+        time_val = p3
+        
+        month_number = months_mapping.get(month_name)
+        
+        if not month_number:
+          return date_str
+        
+        current_year = datetime.now().year
+        day = day.zfill(2)
+        
+        return f"{current_year}-{month_number}-{day} {time_val}"
+  
+    except Exception as e:
+      print(f"❌ [ERROR] Conversion: {e}")
+      return date_str
+    
 class DoctorSearchFunc:
   def __init__(self):
     self.parsers = [
