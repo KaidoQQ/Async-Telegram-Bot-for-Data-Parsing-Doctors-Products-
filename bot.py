@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
@@ -7,14 +8,17 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from dotenv import load_dotenv 
-import sqlite3
+from dotenv import load_dotenv
 import os
-from parsers.doctor_parser import search_doctors_func
-from parsers.product_parser import product_func
+
+from parsers.doctor_parser import DoctorSearchFunc
+from parsers.product_parser import ProductParser
+
 from tech.to_exel import excel_file_doctor 
 from tech.to_exel import excel_file_product
+
 from tech.database import DataBase
+
 from aiogram.types import FSInputFile
 
 
@@ -25,6 +29,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN") #---- Your token here
 logging.basicConfig(level=logging.INFO)
 
 db = DataBase('bot_database.db')
+
+doctor_service = DoctorSearchFunc()
+product_parser = ProductParser()
 
 bot = Bot(
   token=BOT_TOKEN, 
@@ -116,7 +123,14 @@ async def doctor_date_chosen_spec(message: types.Message, state: FSMContext):
 
   await message.answer(f"🔎 Searching for *{name}* in *{city}* on *Date[{date}]*... Please wait.")
 
-  result_data = await search_doctors_func(doctor_name=None,doctor_name_spec=name,date=date,city=city)
+  search_params = {
+    "doctor_name": name if 'doctor_name' in user_data else None,
+    "doctor_name_spec": user_data.get('doctor_name_spec'),
+    "city": city,
+    "date": date
+  }
+
+  result_data = await doctor_service.search(**search_params)
 
   # Генерируем уникальное имя для файла на диске
   # Используем replace, чтобы убрать пробелы, которые могут мешать системе
@@ -174,7 +188,14 @@ async def doctor_date_chosen(message: types.Message, state: FSMContext):
 
   await message.answer(f"🔎 Searching for *{name}* in *{city}* on *Date[{date}]*... Please wait.")
 
-  result_data = await search_doctors_func(doctor_name=name,doctor_name_spec=None,date=date,city=city)
+  search_params = {
+    "doctor_name": name if 'doctor_name' in user_data else None,
+    "doctor_name_spec": user_data.get('doctor_name_spec'),
+    "city": city,
+    "date": date
+  }
+
+  result_data = await doctor_service.search(**search_params)
 
   # Генерируем уникальное имя для файла на диске
   # Используем replace, чтобы убрать пробелы, которые могут мешать системе
@@ -225,7 +246,11 @@ async def product_budget_chosen(message: types.Message, state: FSMContext):
   
   await message.answer(f"🔎 Searching for *{category}* with budget *{budget}*... Please wait.")
 
-  result_data = await product_func(category,budget)
+  result_data = await asyncio.to_thread(
+    product_parser.parser, 
+    category=category, 
+    budget=budget
+  )
 
   safe_name = category.replace(" ", "_")
   new_filename = f"cache/{safe_name}_{budget}.xlsx"
@@ -247,6 +272,9 @@ async def main():
   await dp.start_polling(bot)
 
 if __name__ == "__main__":
+  if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
   try:
     asyncio.run(main())
   except KeyboardInterrupt:
