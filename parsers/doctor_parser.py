@@ -318,7 +318,10 @@ class ZL(BaseParserSelenium):
 
               doctors_links = []
 
-              for doctor in doctors:
+
+              for i,doctor in enumerate(doctors):
+                if i == 12:
+                  break
                 try:
                   link = doctor.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
                   doctors_links.append(link)
@@ -346,6 +349,16 @@ class ZL(BaseParserSelenium):
                     url = "Unknown"
 
                     try:
+                      section = self.driver.find_element(By.CSS_SELECTOR, "section[class='mb-2']")
+                      
+                      if section:
+                        street_el = section.find_element(By.TAG_NAME, "h4")
+                        street = street_el.text
+
+                    except Exception as e:
+                      print(f"❌ [ERROR] On address {e}")
+
+                    try:
                       phone_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-id='gdpr-show-number-block'] button")
                       self.driver.execute_script("arguments[0].click();", phone_btn)
 
@@ -355,17 +368,15 @@ class ZL(BaseParserSelenium):
                         block = self.driver.find_element(By.CSS_SELECTOR, ".hide")
 
                         if block:
-                          phone_el = self.driver.find_element(By.CSS_SELECTOR, ".hide .d-flex a[class='text-muted'] b")
-                          ph_number = phone_el.text
+                          phone_el = self.driver.find_element(By.CSS_SELECTOR, ".hide .d-flex")
+                          phone_link = phone_el.find_element(By.XPATH, ".//a[contains(@href, 'tel:')]")
+                          ph_number = phone_link.get_attribute("textContent").strip()
 
-                          close_btn = self.driver.find_element(By.CSS_SELECTOR, "button[class='close'] i")
-                          self.driver.execute_script("arguments[0].click();", close_btn)
-                        else:
-                          phone_el = self.driver.find_element(By.CSS_SELECTOR, "[data-id='phone-number'] a[class='text-muted'] b")
-                          ph_number = phone_el.text
-
-                          close_btn = self.driver.find_element(By.CSS_SELECTOR, "button[class='close'] i")
-                          self.driver.execute_script("arguments[0].click();", close_btn)
+                          if not ph_number:
+                            href_val = phone_link.get_attribute("href")
+                            if href_val:
+                                ph_number = href_val.replace("tel:", "").strip()
+                            
 
                       except Exception as e:
                         print("❌ [ERROR] With phone number on confirm box")
@@ -373,41 +384,43 @@ class ZL(BaseParserSelenium):
                     except Exception as e:
                       print("❌ No phone number was found")
                     
-                    try:
-                      location_btn = self.driver.find_element(By.CSS_SELECTOR, ".location-details a")
-                      self.driver.execute_script("arguments[0].click();", location_btn)
-
-                      time.sleep(0.5)
-
-                      address_media = self.driver.find_element(By.XPATH,"//i[contains(@class, 'svg-icon-pin')]/ancestor::div[@class='media']")
-
-                      media_box = address_media.find_element(By.CLASS_NAME, "media-body")
-
-                      full_text = media_box.text
-                      lines = full_text.split('/n')
-
-                      if len(lines) >= 2:
-                        street = lines[1]
-                      else:
-                        street = "Address not found"
-                      
-                      close_btn = self.driver.find_element(By.CSS_SELECTOR, "button[class='close'] i")
-                      self.driver.execute_script("arguments[0].click();", close_btn)
-
-                    except Exception as e:
-                      print(f"❌ [ERROR] On address {e}")
                     
                     url = self.driver.current_url
+                    time.sleep(1)
 
                     try:
-                      date_box = self.driver.find_element(By.CSS_SELECTOR, ".dp-calendar-state")
-                      date_el = date_box.find_element(By.CSS_SELECTOR, "p[class='text-muted'] span[class='text-nowrap'] strong")
-
-                      date_text = date_el.text
-
-                      near_date = self._convert_polish_date(date_text)
+                        WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.CLASS_NAME, "calendar-day-date"))
+                        )
+                        
+                        available_days = self.driver.find_elements(
+                            By.CSS_SELECTOR, 
+                            ".calendar-day.day-available"
+                        )
+                        
+                        if available_days:
+                            first_available = available_days[0]
+                            
+                            date_block = first_available.find_element(By.CLASS_NAME, "calendar-day-date")
+                            date_text = date_block.text.strip()
+                            
+                            first_slot = first_available.find_element(
+                                By.CSS_SELECTOR, 
+                                ".calendar-slot-available"
+                            )
+                            time_text = first_slot.text.strip()
+                            
+                            full_date = f"{date_text.replace(chr(10), ' ')} {time_text}"
+                            
+                            near_date = self._convert_polish_date(full_date)
+                            
+                            print(f"✅ Date: {near_date}")
+                        else:
+                            near_date = "No available dates"
+                            
                     except Exception as e:
-                      print(f"❌ [ERROR] With near date {e}")
+                        print(f"❌ [ERROR] With near date {e}")
+                        near_date = "Date not found"
 
 
                     parsed_doc = {
@@ -486,7 +499,7 @@ class ZL(BaseParserSelenium):
     except Exception as e:
       print(f"❌ [ERROR] Conversion: {e}")
       return date_str
-    
+      
 class DoctorSearchFunc:
   def __init__(self):
     self.parsers = [

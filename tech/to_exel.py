@@ -25,9 +25,20 @@ def creator_excel_doctor(data,filename="doctors_list.xlsx"):
       'link': 'URL'
     }, inplace=True)
 
-    df.to_excel(filename,index=False)
+    with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+      sheet_name = 'Doctors'
+      df.to_excel(writer, index=False, sheet_name=sheet_name)
+      
+      worksheet = writer.sheets[sheet_name]
+      
+      for i, col in enumerate(df.columns):
+        max_len_data = df[col].astype(str).map(len).max()
+        if pd.isna(max_len_data): max_len_data = 0
+        
+        max_len = max(max_len_data, len(str(col))) + 2 
+        worksheet.set_column(i, i, max_len)
+    
     print("✅  Excel file was created!")
-
     return os.path.abspath(filename)
   except Exception as e:
     print(f"❌ [ERROR] while creating Excel: {e}")
@@ -56,9 +67,20 @@ def creator_excel_product(data,filename = 'products_list.xlsx'):
       'link' : 'URL'
     }, inplace=True)
 
-    df.to_excel(filename, index=False)
+    with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+      sheet_name = 'Products'
+      df.to_excel(writer, index=False, sheet_name=sheet_name)
+      
+      worksheet = writer.sheets[sheet_name]
+      
+      for i, col in enumerate(df.columns):
+        max_len_data = df[col].astype(str).map(len).max()
+        if pd.isna(max_len_data): max_len_data = 0
+        
+        max_len = max(max_len_data, len(str(col))) + 2 
+        worksheet.set_column(i, i, max_len)
+    
     print("✅  Excel file was created!")
-
     return os.path.abspath(filename)
   except Exception as e:
     print(f"❌ [ERROR] while creating Excel: {e}")
