@@ -36,3 +36,4 @@ class BaseParserSelenium(ABC):
   @abstractmethod
   def parser(self,**kwargs):
     pass
+

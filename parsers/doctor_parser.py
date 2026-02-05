@@ -283,7 +283,7 @@ class ZL(BaseParserSelenium):
           btn = cook.find_element(By.CLASS_NAME, "banner-actions-container")
           btn.click()
           print("✅🍪 Cookie was successful accepted")
-          time.sleep(1)
+          time.sleep(0.5)
         else:
           print("🍪 No cookie button was found")
         
@@ -299,13 +299,13 @@ class ZL(BaseParserSelenium):
           doctor_ent = container.find_element(By.CSS_SELECTOR, ".specialists-col input")
           doctor_ent.clear()
           doctor_ent.send_keys(doctor_name_spec)
-          time.sleep(0.5)
+          time.sleep(0.25)
           doctor_ent.send_keys(Keys.ENTER)
-          time.sleep(0.5)
+          time.sleep(0.25)
 
           final_btn = container.find_element(By.CSS_SELECTOR, ".button-col button")
           self.driver.execute_script("arguments[0].click();", final_btn)
-          time.sleep(1.5)
+          time.sleep(1)
 
           try:
             search_results = wait.until(EC.presence_of_element_located((By.ID, "search-content")))
@@ -332,7 +332,7 @@ class ZL(BaseParserSelenium):
                     print(f"🔍 Processing doctor {i+1}/{len(doctors_links)}...")
 
                     self.driver.get(link)
-                    time.sleep(1)
+                    time.sleep(0.5)
                     try:
                       name_el = self.driver.find_element(By.TAG_NAME, "h1")
                       name = name_el.text
@@ -383,7 +383,7 @@ class ZL(BaseParserSelenium):
                     
                     
                     url = self.driver.current_url
-                    time.sleep(1)
+                    time.sleep(0.5)
 
                     try:
                         WebDriverWait(self.driver, 5).until(
@@ -438,6 +438,125 @@ class ZL(BaseParserSelenium):
     
           except Exception  as e:
             print(f"❌ [ERROR] No doctors was found {e}")
+
+        if doctor_name != None:
+          doctor_ent = container.find_element(By.CSS_SELECTOR, ".specialists-col input")
+          doctor_ent.clear()
+          doctor_ent.send_keys(doctor_name)
+          time.sleep(0.25)
+          doctor_ent.send_keys(Keys.ENTER)
+          time.sleep(0.25)
+
+          final_btn = container.find_element(By.CSS_SELECTOR, ".button-col button")
+          self.driver.execute_script("arguments[0].click();", final_btn)
+          time.sleep(1)
+
+          try:
+            search_result = self.driver.find_element(By.CSS_SELECTOR, ".unified-doctor-content")
+
+            if search_result:
+              try:
+                name_el = self.driver.find_element(By.TAG_NAME, "h1")
+                name = name_el.text
+              except Exception as e:
+                print(f"❌ [ERROR] With name {e}")
+                name = "Name Not Found"
+
+              ph_number = "No phone number"
+              near_date = "Unknown"
+              street = "Unknown"
+              url = "Unknown"
+
+              try:
+                section = self.driver.find_element(By.CSS_SELECTOR, "section[class='mb-2']")
+                
+                if section:
+                  street_el = section.find_element(By.TAG_NAME, "h4")
+                  street = street_el.text
+
+              except Exception as e:
+                print(f"❌ [ERROR] On address {e}")
+
+              try:
+                phone_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-id='gdpr-show-number-block'] button")
+                self.driver.execute_script("arguments[0].click();", phone_btn)
+
+                time.sleep(0.5)
+
+                try:
+                  block = self.driver.find_element(By.CSS_SELECTOR, ".hide")
+
+                  if block:
+                    phone_el = self.driver.find_element(By.CSS_SELECTOR, ".hide .d-flex")
+                    phone_link = phone_el.find_element(By.XPATH, ".//a[contains(@href, 'tel:')]")
+                    ph_number = phone_link.get_attribute("textContent").strip()
+
+                    if not ph_number:
+                      href_val = phone_link.get_attribute("href")
+                      if href_val:
+                          ph_number = href_val.replace("tel:", "").strip()
+                      
+
+                except Exception as e:
+                  print("❌ [ERROR] With phone number on confirm box")
+
+              except Exception as e:
+                print("❌ No phone number was found")
+              
+              
+              url = self.driver.current_url
+              time.sleep(1)
+
+              try:
+                  WebDriverWait(self.driver, 5).until(
+                      EC.presence_of_element_located((By.CLASS_NAME, "calendar-day-date"))
+                  )
+                  
+                  available_days = self.driver.find_elements(
+                      By.CSS_SELECTOR, 
+                      ".calendar-day.day-available"
+                  )
+                  
+                  if available_days:
+                      first_available = available_days[0]
+                      
+                      date_block = first_available.find_element(By.CLASS_NAME, "calendar-day-date")
+                      date_text = date_block.text.strip()
+                      
+                      first_slot = first_available.find_element(
+                          By.CSS_SELECTOR, 
+                          ".calendar-slot-available"
+                      )
+                      time_text = first_slot.text.strip()
+                      
+                      full_date = f"{date_text.replace(chr(10), ' ')} {time_text}"
+                      
+                      near_date = self._convert_polish_date(full_date)
+                      
+                      print(f"✅ Date: {near_date}")
+                  else:
+                      near_date = "No available dates"
+                      
+              except Exception as e:
+                  print(f"❌ [ERROR] With near date {e}")
+                  near_date = "Date not found"
+
+
+              parsed_doc = {
+                'name' : name,
+                'ph_number' : ph_number,
+                'near_date' : near_date,
+                'street' : street,
+                'link' : url
+              }
+
+              parsed_data.append(parsed_doc)
+
+              print(f"✅  Doctor: {name} | Tel: {ph_number} | Date: {near_date} | Street: {street} | Link: {url}")
+              print()
+
+          except Exception as e:
+            print(f"❌ [ERROR] No doctor was found! {e}")   
 
       except Exception as e:
         print(f"❌ [ZnanyLekarz] Longer than 7 sec or ERROR_NAME: {e}")
