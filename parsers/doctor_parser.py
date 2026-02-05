@@ -20,7 +20,7 @@ class LKZ(BaseParserSelenium):
     super().__init__()
     self.url = URL_1
 
-  def parser(self, doctor_name = None, doctor_name_spec = None, date = None, city = None):
+  def parser(self, doctor_name = None, doctor_name_spec = None, city = None):
     print(f"✳️ [LekarzeBezKolejki] Starts for {city}...")
     self._setup_driver()
     wait = WebDriverWait(self.driver, 7)
@@ -81,21 +81,18 @@ class LKZ(BaseParserSelenium):
                     print("❌ No phone number was found")
 
                   name = name_el.text
-                  n_date = date.lower()
-                  n_date = n_date.replace(" ","")
 
-                  if n_date == "nearest":
+                  try:
+                    near_date_el = doctor.find_element(By.CSS_SELECTOR, ".tb-data")
+                    near_date = near_date_el.text
+                    new_date = self._convert_polish_date(near_date)
+                  except:
                     try:
-                      near_date_el = doctor.find_element(By.CSS_SELECTOR, ".tb-data")
+                      near_date_el = doctor.find_element(By.CSS_SELECTOR, ".tb-none")
                       near_date = near_date_el.text
-                      new_date = self._convert_polish_date(near_date)
+                      new_date = "This doctor didnt indicate an upcoming date"
                     except:
-                      try:
-                        near_date_el = doctor.find_element(By.CSS_SELECTOR, ".tb-none")
-                        near_date = near_date_el.text
-                        new_date = "This doctor didnt indicate an upcoming date"
-                      except:
-                        new_date = "Date info not found"
+                      new_date = "Date info not found"
 
                   try:
                     street_el = doctor.find_element(By.CSS_SELECTOR, "span.device-n")
@@ -270,7 +267,7 @@ class ZL(BaseParserSelenium):
     super().__init__()
     self.url = URL_2
 
-  def parser(self, doctor_name = None, doctor_name_spec = None, date = None, city = None):
+  def parser(self, doctor_name = None, doctor_name_spec = None, city = None):
     print(f"✳️ [ZnanyLekarz] Starts for {city}...")
     self._setup_driver()
     wait = WebDriverWait(self.driver, 7)

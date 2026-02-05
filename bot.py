@@ -21,6 +21,8 @@ from tech.database import DataBase
 
 from aiogram.types import FSInputFile
 
+from deep_translator import GoogleTranslator
+
 
 load_dotenv("tokens.env")
 
@@ -29,6 +31,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN") #---- Your token here
 logging.basicConfig(level=logging.INFO)
 
 db = DataBase('bot_database.db')
+
 
 doctor_service = DoctorSearchFunc()
 product_parser = ProductParser()
@@ -52,6 +55,14 @@ class ProductSearch(StatesGroup):
   waiting_for_category = State()
   waiting_for_budget = State()
 
+def translate_to_polish(text):
+  try:
+    translated = GoogleTranslator(source='auto', target='pl').translate(text)
+    return translated
+  except Exception as e:
+    logging.error(f"❌ [ERROR]: {e}")
+    return text
+
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -59,8 +70,8 @@ async def cmd_start(message: types.Message):
   print(f"👤 User {message.from_user.first_name} saved to DB")
 
   kb = [
-    [KeyboardButton(text = "👨‍⚕️ Doctor Search (Specialty)"),
-     KeyboardButton(text = "👨‍⚕️ Doctor Search (Name Surname)"),
+    [KeyboardButton(text = "👨‍⚕️ Doc Search (Spec)"),
+     KeyboardButton(text = "👨‍⚕️ Doc Search (Name)"),
     KeyboardButton(text = "🛍 Product Search")
     ],
     [
@@ -84,7 +95,7 @@ async def cmd_help(message: types.Message):
   await message.answer("I can help you find open slots for doctors or track product prices.")
 
 
-@dp.message(F.text == "👨‍⚕️ Doctor Search (Specialty)")
+@dp.message(F.text == "👨‍⚕️ Doc Search (Spec)")
 async def doctor_name_search_spec(message: types.Message, state: FSMContext):
   await message.answer("Please enter the *Specialty* (e.g., Dentist):")
   await state.set_state(DoctorSearch.waiting_for_name_spec)
@@ -93,23 +104,18 @@ async def doctor_name_search_spec(message: types.Message, state: FSMContext):
 async def doctor_name_chosen_spec(message: types.Message, state: FSMContext):
   await state.update_data(doctor_name_spec = message.text)
   await message.answer("Got it. Now please enter the *City* (e.g., Krakow):")
-  await state.set_state(DoctorSearch.waiting_for_city_spec)
-
-
-@dp.message(DoctorSearch.waiting_for_city_spec)
-async def doctor_name_chosen_spec(message: types.Message, state: FSMContext):
-  await state.update_data(city_spec = message.text)
-  await message.answer("Got it. Now please enter the *Date or Period* (e.g., Nearest):")
   await state.set_state(DoctorSearch.waiting_for_date_spec)
+
 
 @dp.message(DoctorSearch.waiting_for_date_spec)
 async def doctor_date_chosen_spec(message: types.Message, state: FSMContext):
   user_data = await state.get_data()
   name = user_data['doctor_name_spec'].lower().strip()
-  city = user_data['city_spec'].lower().strip()
-  date = message.text.lower().strip()
+  city = message.text.lower().strip()
 
-  search_query = f"Doctor: {name}, City: {city}, Date: {date}"
+  n_name_spec = await asyncio.to_thread(translate_to_polish, name)
+
+  search_query = f"Doctor: {name}, City: {city}"
   cached_path = db.get_cached_file(search_query)
 
   if cached_path and os.path.exists(cached_path):
@@ -121,13 +127,12 @@ async def doctor_date_chosen_spec(message: types.Message, state: FSMContext):
     await state.clear()
     return 
 
-  await message.answer(f"🔎 Searching for *{name}* in *{city}* on *Date[{date}]*... Please wait.")
+  await message.answer(f"🔎 Searching for *{name}* in *{city}*... Please wait.")
 
   search_params = {
     "doctor_name": name if 'doctor_name' in user_data else None,
-    "doctor_name_spec": user_data.get('doctor_name_spec'),
+    "doctor_name_spec": n_name_spec,
     "city": city,
-    "date": date
   }
 
   result_data = await doctor_service.search(**search_params)
@@ -135,7 +140,7 @@ async def doctor_date_chosen_spec(message: types.Message, state: FSMContext):
   # Генерируем уникальное имя для файла на диске
   # Используем replace, чтобы убрать пробелы, которые могут мешать системе
   safe_name = name.replace(" ", "_")
-  new_filename = f"cache/{safe_name}_{city}_{date}.xlsx"
+  new_filename = f"cache/{safe_name}_{city}.xlsx"
 
   file_path = await excel_file_doctor(result_data, filename=new_filename)
 
@@ -150,7 +155,7 @@ async def doctor_date_chosen_spec(message: types.Message, state: FSMContext):
 
 
 
-@dp.message(F.text == "👨‍⚕️ Doctor Search (Name Surname)")
+@dp.message(F.text == "👨‍⚕️ Doc Search (Name)")
 async def doctor_name_search(message: types.Message, state: FSMContext):
   await message.answer("Please enter the doctors *Name and Surname* (e.g.,Alla Krykhta)")
   await state.set_state(DoctorSearch.waiting_for_name)
@@ -159,22 +164,16 @@ async def doctor_name_search(message: types.Message, state: FSMContext):
 async def doctor_name_chosen(message: types.Message, state: FSMContext):
   await state.update_data(doctor_name = message.text)
   await message.answer("Got it. Now please enter the *City* (e.g., Krakow):")
-  await state.set_state(DoctorSearch.waiting_for_city)
-
-@dp.message(DoctorSearch.waiting_for_city)
-async def doctor_name_chosen(message: types.Message, state: FSMContext):
-  await state.update_data(city = message.text)
-  await message.answer("Got it. Now please enter the *Date or Period* (e.g., Nearest):")
   await state.set_state(DoctorSearch.waiting_for_date)
+
 
 @dp.message(DoctorSearch.waiting_for_date)
 async def doctor_date_chosen(message: types.Message, state: FSMContext):
   user_data = await state.get_data()
   name = user_data['doctor_name'].lower().strip()
-  city = user_data['city'].lower().strip()
-  date = message.text.lower().strip()
+  city = message.text.lower().strip()
 
-  search_query = f"Doctor: {name}, City: {city}, Date: {date}"
+  search_query = f"Doctor: {name}, City: {city}"
   cached_path = db.get_cached_file(search_query)
 
   if cached_path and os.path.exists(cached_path):
@@ -186,13 +185,12 @@ async def doctor_date_chosen(message: types.Message, state: FSMContext):
     await state.clear()
     return 
 
-  await message.answer(f"🔎 Searching for *{name}* in *{city}* on *Date[{date}]*... Please wait.")
+  await message.answer(f"🔎 Searching for *{name}* in *{city}*... Please wait.")
 
   search_params = {
     "doctor_name": name if 'doctor_name' in user_data else None,
     "doctor_name_spec": user_data.get('doctor_name_spec'),
     "city": city,
-    "date": date
   }
 
   result_data = await doctor_service.search(**search_params)
@@ -200,7 +198,7 @@ async def doctor_date_chosen(message: types.Message, state: FSMContext):
   # Генерируем уникальное имя для файла на диске
   # Используем replace, чтобы убрать пробелы, которые могут мешать системе
   safe_name = name.replace(" ", "_")
-  new_filename = f"cache/{safe_name}_{city}_{date}.xlsx"
+  new_filename = f"cache/{safe_name}_{city}.xlsx"
 
   file_path = await excel_file_doctor(result_data, filename=new_filename)
 
