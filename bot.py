@@ -86,13 +86,13 @@ async def cmd_start(message: types.Message):
   )
 
   await message.answer(
-    f"Hello, {message.from_user.first_name}! I am your Parser Bot. Choose an option:",
+    f"Hi {message.from_user.first_name}! I was created to make your life easier. I can help you find available doctor appointments and products that fit your budget. P.S. For now, I can only find appointments in Poland, but I’ll be learning new skills soon!",
     reply_markup=keyboard
   )
 
 @dp.message(F.text =="ℹ️ Help")
 async def cmd_help(message: types.Message):
-  await message.answer("I can help you find open slots for doctors or track product prices.")
+  await message.answer("*👨‍⚕️ Doc Search (Name)* — Searches for a doctor by first and last name.\n*👨‍⚕️ Doc Search (Spec)* — Searches for doctors by specialty.\n*🛍 Product Search* — Searches for products based on your specific criteria.")
 
 
 @dp.message(F.text == "👨‍⚕️ Doc Search (Spec)")
@@ -137,8 +137,6 @@ async def doctor_date_chosen_spec(message: types.Message, state: FSMContext):
 
   result_data = await doctor_service.search(**search_params)
 
-  # Генерируем уникальное имя для файла на диске
-  # Используем replace, чтобы убрать пробелы, которые могут мешать системе
   safe_name = name.replace(" ", "_")
   new_filename = f"cache/{safe_name}_{city}.xlsx"
 
@@ -195,8 +193,6 @@ async def doctor_date_chosen(message: types.Message, state: FSMContext):
 
   result_data = await doctor_service.search(**search_params)
 
-  # Генерируем уникальное имя для файла на диске
-  # Используем replace, чтобы убрать пробелы, которые могут мешать системе
   safe_name = name.replace(" ", "_")
   new_filename = f"cache/{safe_name}_{city}.xlsx"
 
